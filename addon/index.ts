@@ -5733,7 +5733,36 @@ const catalogRoute = async function (req, res) {
     return res.status(500).send("Internal Server Error");
   }
 };
-addon.get("/stremio/:userUUID/catalog/:type/:id{/:extra}.json", catalogRoute);
+/** A read naming its household user, as watch state does, gets that user's history and accounts rows;
+ *  a read naming nobody here is refused rather than served as yours. */
+const catalogRouteForViewer = async function (req, res) {
+  const named = req.query.viewer;
+  if (named === undefined || named === '') return catalogRoute(req, res);
+  const { userUUID } = req.params;
+  const storedConfig = await loadRouteConfig(userUUID);
+  if (!storedConfig) return catalogRoute(req, res);
+
+  const { hasNamedViewers, viewerByName } = require('./lib/jellyfin/profiles');
+  if (!hasNamedViewers(storedConfig, userUUID)) return catalogRoute(req, res);
+  const profile = typeof named === 'string' ? viewerByName(storedConfig, userUUID, named) : undefined;
+  if (!profile) {
+    consola.info(`[Catalog] Unknown viewer "${String(named).slice(0, 64)}" for ${userUUID}`);
+    return res.status(404).json({ error: "Unknown viewer" });
+  }
+  if (!profile.id) return catalogRoute(req, res);
+
+  const { runAsProfile } = require('./utils/recommendations/history');
+  const { accountOwner } = require('./lib/accounts');
+  const { noteAccountOwner } = require('./lib/jellyfin/viewer');
+  return runAsProfile(storedConfig, userUUID, profile.id, (viewerConfig: any) => {
+    // The account rows then read this user's accounts, as the Jellyfin server's reads do.
+    const owner = accountOwner(viewerConfig);
+    noteAccountOwner(owner);
+    if (owner) req.params.accountOwner = owner;
+    return catalogRoute(req, res);
+  });
+};
+addon.get("/stremio/:userUUID/catalog/:type/:id{/:extra}.json", catalogRouteForViewer);
 registerInProcessRoute('catalog', "/stremio/:userUUID/catalog/:type/:id{/:extra}.json", catalogRoute);
 // --- Meta Route (with enhanced caching) ---
 const metaRoute = async function (req, res) {
