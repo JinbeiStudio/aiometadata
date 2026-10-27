@@ -233,6 +233,8 @@ AIOStreams sends and reads these only with its `WATCH_STATE_HANDOFF_ENABLED` swi
 
 Running both servers at once is fine: a client on this addon's server plays through AIOStreams as a plain stream addon, which is not a session AIOStreams reports, so a play is recorded once, by whichever server the client signed in to.
 
+**One configuration in several languages.** `?language=` on the install URL (for example `.../manifest.json?language=en-US`, in the `xx-XX` form the configuration page offers) replaces the configuration's language for the manifest, catalog and meta reads made through it, and their caches follow it. A value in any other form is ignored. A household can then keep one configuration and give each AIOStreams user, or each client language through a variant, the language they read.
+
 ## Artwork and appearance
 
 Posters, backdrops and logos are the ones the configuration already serves. With the [image cache](image-cache.md) on, **Bring Posters to 2:3** (`POSTER_CACHE_SHAPE_POSTERS`, on by default) brings a poster that is not roughly 2:3 to shape before it is stored: a slightly off one is cropped, a landscape one is placed over a blurred fill. This matters in clients that lay posters on a fixed grid, where one wide image otherwise overlaps its neighbours. Without the cache the same shaping is done as the poster is served.
