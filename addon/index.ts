@@ -5771,10 +5771,9 @@ const catalogRouteForViewer = async function (req, res) {
   if (profile.tags.length) req.viewerTags = profile.tags;
   if (!profile.id) return catalogRoute(req, res);
 
-  const { accountOwner, servesCatalog } = require('./lib/accounts');
+  const { accountOwner, catalogEntryFor, servesCatalog } = require('./lib/accounts');
   const scoped = scopeConfigToProfile(storedConfig, userUUID, profile.id);
-  const bare = String(req.params.id).replace(/_(movie|series|anime|all)$/, '');
-  if (!servesCatalog(scoped, (storedConfig.catalogs ?? []).find((c) => c?.id === bare) ?? { id: bare })) {
+  if (!servesCatalog(scoped, catalogEntryFor(storedConfig, req.params.id))) {
     req.userConfig = storedConfig;
     return respond(req, res, { metas: [] });
   }
