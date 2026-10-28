@@ -517,6 +517,11 @@ function withRequestLanguage(config, req) {
   return { ...config, language: asked };
 }
 
+/** A named viewer's own tags take the place of the install URL's, as on this addon's own server. */
+function tagsAsked(req) {
+  return req.viewerTags ?? req.query.tag;
+}
+
 /**
  * The filtering an install URL asks for, from the profiles it names and from the raw
  * parameters. One UUID can then serve both an unrestricted and a family install.
@@ -527,7 +532,7 @@ function withRequestLanguage(config, req) {
 function applyRatingOverrides(config, req, userUUID) {
   const rawRating = req.query.contentrating ?? req.query.contentRating;
   const rawUnrated = req.query.unrated;
-  const rawTag = req.query.tag;
+  const rawTag = tagsAsked(req);
   if (rawRating === undefined && rawUnrated === undefined && rawTag === undefined) return config;
 
   const { tags: urlTags } = resolveManifestTags(config, rawTag);
@@ -4972,7 +4977,7 @@ const catalogRoute = async function (req, res) {
     const { collectionCatalogMetas, isCollectionCatalogId } = require('./lib/collectionBuilder/aiostreamsCollections');
     if (isCollectionCatalogId(id)) {
       const skip = parseInt(new URLSearchParams(extra || '').get('skip') || '0', 10) || 0;
-      const { tags } = resolveManifestTags(storedConfig, req.query.tag);
+      const { tags } = resolveManifestTags(storedConfig, tagsAsked(req));
       const metas = await collectionCatalogMetas(userUUID, config, tags, id, skip);
       if (!metas) return res.status(404).send({ error: "Collection not found" });
       req.userConfig = config;
@@ -5768,6 +5773,8 @@ const catalogRouteForViewer = async function (req, res) {
     req.userConfig = storedConfig;
     return respond(req, res, { metas: [] });
   }
+
+  if (profile.tags.length) req.viewerTags = profile.tags;
 
   const { runAsProfile } = require('./utils/recommendations/history');
   const { noteAccountOwner } = require('./lib/jellyfin/viewer');
