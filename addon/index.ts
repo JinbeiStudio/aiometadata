@@ -4969,7 +4969,7 @@ const catalogRoute = async function (req, res) {
     return res.status(404).send({ error: "User configuration not found" });
   }
   const { viewerConfigFor } = require('./lib/accounts');
-  // Set only by the Jellyfin server's reads or for a named viewer, never taken from the request as is.
+  // `accountOwner` is set only by the Jellyfin server's reads and `viewerConfig` only for a named viewer, never from the request.
   const config = applyRatingOverrides(viewerConfigFor(req.viewerConfig ?? storedConfig, req.params.accountOwner, id), req, userUUID);
   config.userUUID = userUUID;
 
@@ -5779,15 +5779,12 @@ const catalogRouteForViewer = async function (req, res) {
     return respond(req, res, { metas: [] });
   }
 
+  // The account rows read the accounts this user is scoped to: their own, none, or yours when they share your history.
+  req.viewerConfig = { ...storedConfig, jellyfinAccounts: scoped.jellyfinAccounts, jellyfinAccountOwner: scoped.jellyfinAccountOwner };
   const { runAsProfile } = require('./utils/recommendations/history');
   const { noteAccountOwner } = require('./lib/jellyfin/viewer');
-  return runAsProfile(storedConfig, userUUID, profile.id, (viewerConfig: any) => {
-    // The account rows then read this user's accounts, as the Jellyfin server's reads do.
-    const owner = accountOwner(viewerConfig);
-    noteAccountOwner(owner);
-    if (owner) req.params.accountOwner = owner;
-    // A user with a history of their own and no accounts reads none, never yours.
-    else if (scoped.jellyfinAccounts) req.viewerConfig = { ...storedConfig, jellyfinAccounts: scoped.jellyfinAccounts };
+  return runAsProfile(storedConfig, userUUID, profile.id, () => {
+    noteAccountOwner(accountOwner(scoped));
     return catalogRoute(req, res);
   });
 };
