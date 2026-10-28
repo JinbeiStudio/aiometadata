@@ -4963,14 +4963,14 @@ function withCatalogCriticRatings(metas: any[], config: any, req: any): Promise<
 
 const catalogRoute = async function (req, res) {
   const { userUUID, type, id, extra } = req.params;
-  const storedConfig = await loadRouteConfig(userUUID);
-  
+  // `viewerConfig` is set only for a named viewer and `accountOwner` only by the Jellyfin server's reads, never from the request.
+  const storedConfig = req.viewerConfig ?? await loadRouteConfig(userUUID);
+
   if (!storedConfig) {
     return res.status(404).send({ error: "User configuration not found" });
   }
   const { viewerConfigFor } = require('./lib/accounts');
-  // `accountOwner` is set only by the Jellyfin server's reads and `viewerConfig` only for a named viewer, never from the request.
-  const config = applyRatingOverrides(viewerConfigFor(req.viewerConfig ?? storedConfig, req.params.accountOwner, id), req, userUUID);
+  const config = applyRatingOverrides(viewerConfigFor(storedConfig, req.params.accountOwner, id), req, userUUID);
   config.userUUID = userUUID;
 
   {
@@ -5761,7 +5761,7 @@ const catalogRouteForViewer = async function (req, res) {
   const storedConfig = await loadRouteConfig(userUUID);
   if (!storedConfig) return catalogRoute(req, res);
 
-  const { profileForViewer, scopeConfigToProfile } = require('./lib/jellyfin/profiles');
+  const { profileForViewer, profileKey, scopeConfigToProfile } = require('./lib/jellyfin/profiles');
   const profile = profileForViewer(storedConfig, userUUID, named);
   if (profile === undefined) {
     consola.info(`[Catalog] Unknown viewer "${String(named).slice(0, 64)}" for ${userUUID}`);
@@ -5781,9 +5781,9 @@ const catalogRouteForViewer = async function (req, res) {
 
   // The account rows read the accounts this user is scoped to: their own, none, or yours when they share your history.
   req.viewerConfig = { ...storedConfig, jellyfinAccounts: scoped.jellyfinAccounts, jellyfinAccountOwner: scoped.jellyfinAccountOwner };
-  const { runAsProfile } = require('./utils/recommendations/history');
-  const { noteAccountOwner } = require('./lib/jellyfin/viewer');
-  return runAsProfile(storedConfig, userUUID, profile.id, () => {
+  const { noteAccountOwner, noteProfile, runInViewerScope } = require('./lib/jellyfin/viewer');
+  return runInViewerScope(false, () => {
+    noteProfile(profileKey(scoped));
     noteAccountOwner(accountOwner(scoped));
     return catalogRoute(req, res);
   });
