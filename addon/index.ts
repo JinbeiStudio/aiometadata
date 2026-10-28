@@ -4980,7 +4980,7 @@ const catalogRoute = async function (req, res) {
     return res.status(404).send({ error: "User configuration not found" });
   }
   const { viewerConfigFor } = require('./lib/accounts');
-  // Set only by the Jellyfin server's in-process reads, never from the request.
+  // Set only by the Jellyfin server's reads or for a named viewer, never taken from the request as is.
   const config = withRequestLanguage(applyRatingOverrides(viewerConfigFor(req.viewerConfig ?? storedConfig, req.params.accountOwner, id), req, userUUID), req);
   config.userUUID = userUUID;
 
