@@ -4965,7 +4965,7 @@ const catalogRoute = async function (req, res) {
   }
   const { viewerConfigFor } = require('./lib/accounts');
   // Set only by the Jellyfin server's in-process reads, never from the request.
-  const config = withRequestLanguage(applyRatingOverrides(viewerConfigFor(storedConfig, req.params.accountOwner, id), req, userUUID), req);
+  const config = withRequestLanguage(applyRatingOverrides(viewerConfigFor(req.viewerConfig ?? storedConfig, req.params.accountOwner, id), req, userUUID), req);
   config.userUUID = userUUID;
 
   {
@@ -5753,7 +5753,7 @@ const catalogRouteForViewer = async function (req, res) {
   const storedConfig = await loadRouteConfig(userUUID);
   if (!storedConfig) return catalogRoute(req, res);
 
-  const { profileForViewer } = require('./lib/jellyfin/profiles');
+  const { profileForViewer, scopeConfigToProfile } = require('./lib/jellyfin/profiles');
   const profile = profileForViewer(storedConfig, userUUID, named);
   if (profile === undefined) {
     consola.info(`[Catalog] Unknown viewer "${String(named).slice(0, 64)}" for ${userUUID}`);
@@ -5761,14 +5761,23 @@ const catalogRouteForViewer = async function (req, res) {
   }
   if (!profile) return catalogRoute(req, res);
 
+  const { accountOwner, servesCatalog } = require('./lib/accounts');
+  const scoped = scopeConfigToProfile(storedConfig, userUUID, profile.id);
+  const bare = String(req.params.id).replace(/_(movie|series|anime|all)$/, '');
+  if (!servesCatalog(scoped, (storedConfig.catalogs ?? []).find((c) => c?.id === bare) ?? { id: bare })) {
+    req.userConfig = storedConfig;
+    return respond(req, res, { metas: [] });
+  }
+
   const { runAsProfile } = require('./utils/recommendations/history');
-  const { accountOwner } = require('./lib/accounts');
   const { noteAccountOwner } = require('./lib/jellyfin/viewer');
   return runAsProfile(storedConfig, userUUID, profile.id, (viewerConfig: any) => {
     // The account rows then read this user's accounts, as the Jellyfin server's reads do.
     const owner = accountOwner(viewerConfig);
     noteAccountOwner(owner);
     if (owner) req.params.accountOwner = owner;
+    // A user with a history of their own and no accounts reads none, never yours.
+    else if (scoped.jellyfinAccounts) req.viewerConfig = { ...storedConfig, jellyfinAccounts: scoped.jellyfinAccounts };
     return catalogRoute(req, res);
   });
 };
