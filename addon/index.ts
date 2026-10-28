@@ -513,8 +513,8 @@ function tagsAsked(req) {
 }
 
 /** A request naming nobody here is refused rather than served as yours. */
-function refuseUnknownViewer(res, area, userUUID, name) {
-  consola.info(`[${area}] Unknown viewer "${String(name).slice(0, 64)}" for ${userUUID}`);
+function refuseUnknownViewer(res, area, userUUID, name, quiet = false) {
+  consola[quiet ? 'debug' : 'info'](`[${area}] Unknown viewer "${String(name).slice(0, 64)}" for ${userUUID}`);
   return res.status(404).json({ error: "Unknown viewer" });
 }
 
@@ -5764,7 +5764,7 @@ const catalogRouteForViewer = async function (req, res) {
 
   const { profileForViewer, profileKey, scopeConfigToProfile } = require('./lib/jellyfin/profiles');
   const profile = profileForViewer(storedConfig, userUUID, named);
-  if (profile === undefined) return refuseUnknownViewer(res, 'Catalog', userUUID, named);
+  if (profile === undefined) return refuseUnknownViewer(res, 'Catalog', userUUID, named, true);
   if (!profile) return catalogRoute(req, res);
   if (profile.tags.length) req.viewerTags = profile.tags;
   if (!profile.id) return catalogRoute(req, res);
