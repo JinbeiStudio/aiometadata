@@ -5753,14 +5753,13 @@ const catalogRouteForViewer = async function (req, res) {
   const storedConfig = await loadRouteConfig(userUUID);
   if (!storedConfig) return catalogRoute(req, res);
 
-  const { hasNamedViewers, viewerByName } = require('./lib/jellyfin/profiles');
-  if (!hasNamedViewers(storedConfig, userUUID)) return catalogRoute(req, res);
-  const profile = typeof named === 'string' ? viewerByName(storedConfig, userUUID, named) : undefined;
-  if (!profile) {
+  const { profileForViewer } = require('./lib/jellyfin/profiles');
+  const profile = profileForViewer(storedConfig, userUUID, named);
+  if (profile === undefined) {
     consola.info(`[Catalog] Unknown viewer "${String(named).slice(0, 64)}" for ${userUUID}`);
     return res.status(404).json({ error: "Unknown viewer" });
   }
-  if (!profile.id) return catalogRoute(req, res);
+  if (!profile) return catalogRoute(req, res);
 
   const { runAsProfile } = require('./utils/recommendations/history');
   const { accountOwner } = require('./lib/accounts');
