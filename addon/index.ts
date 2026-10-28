@@ -4888,7 +4888,7 @@ addon.get("/stremio/:userUUID/manifest.json", async function (req, res) {
         if (unknownTags.length > 0) {
             consola.warn(`[Manifest] User ${userUUID} asked for ${unknownTags.join(', ')}, which no catalog is tagged with`);
         }
-        const viewer = profile ? scopeConfigToProfile(config, userUUID, profile.id) : undefined;
+        const viewer = profile?.id ? scopeConfigToProfile(config, userUUID, profile.id) : undefined;
         const manifest = await getManifest(config, { tags, userUUID, viewer });
             if (!manifest) {
                 res.setHeader('Access-Control-Allow-Origin', '*');
@@ -5765,6 +5765,8 @@ const catalogRouteForViewer = async function (req, res) {
     return res.status(404).json({ error: "Unknown viewer" });
   }
   if (!profile) return catalogRoute(req, res);
+  if (profile.tags.length) req.viewerTags = profile.tags;
+  if (!profile.id) return catalogRoute(req, res);
 
   const { accountOwner, servesCatalog } = require('./lib/accounts');
   const scoped = scopeConfigToProfile(storedConfig, userUUID, profile.id);
@@ -5773,8 +5775,6 @@ const catalogRouteForViewer = async function (req, res) {
     req.userConfig = storedConfig;
     return respond(req, res, { metas: [] });
   }
-
-  if (profile.tags.length) req.viewerTags = profile.tags;
 
   const { runAsProfile } = require('./utils/recommendations/history');
   const { noteAccountOwner } = require('./lib/jellyfin/viewer');
