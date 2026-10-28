@@ -507,16 +507,6 @@ const getCacheHeaders = function (opts) {
   return headerParts.length > 0 ? headerParts.join(", ") : false;
 };
 
-// The form every language the configuration page offers takes.
-const REQUEST_LANGUAGE = /^[a-z]{2}-[A-Z]{2}$/;
-
-/** The language an install URL asks for (?language=en-US) in place of the saved one; copied, as below. */
-function withRequestLanguage(config, req) {
-  const asked = req.query?.language;
-  if (typeof asked !== 'string' || !REQUEST_LANGUAGE.test(asked) || asked === config.language) return config;
-  return { ...config, language: asked };
-}
-
 /** A named viewer's own tags take the place of the install URL's, as on this addon's own server. */
 function tagsAsked(req) {
   return req.viewerTags ?? req.query.tag;
@@ -4861,15 +4851,14 @@ addon.get("/stremio/:userUUID/manifest.json", async function (req, res) {
     const { userUUID } = req.params;
     try {
         // Load config from database
-        const storedConfig = await database.getUserConfig(userUUID);
-        if (!storedConfig) {
+        const config = await database.getUserConfig(userUUID);
+        if (!config) {
             consola.debug(`[Manifest] No config found for user: ${userUUID}`);
             res.setHeader('Access-Control-Allow-Origin', '*');
             res.setHeader('Access-Control-Allow-Headers', '*');
             return res.status(404).send({ err: "User configuration not found." });
         }
-        const config = withRequestLanguage(storedConfig, req);
-
+        
         const { profileForViewer, scopeConfigToProfile } = require('./lib/jellyfin/profiles');
         const profile = profileForViewer(config, userUUID, req.query.viewer);
         if (profile === undefined) {
@@ -4981,7 +4970,7 @@ const catalogRoute = async function (req, res) {
   }
   const { viewerConfigFor } = require('./lib/accounts');
   // Set only by the Jellyfin server's reads or for a named viewer, never taken from the request as is.
-  const config = withRequestLanguage(applyRatingOverrides(viewerConfigFor(req.viewerConfig ?? storedConfig, req.params.accountOwner, id), req, userUUID), req);
+  const config = applyRatingOverrides(viewerConfigFor(req.viewerConfig ?? storedConfig, req.params.accountOwner, id), req, userUUID);
   config.userUUID = userUUID;
 
   {
@@ -5812,12 +5801,11 @@ const metaRoute = async function (req, res) {
   }
   
   // Load config from database
-  const storedConfig = await loadRouteConfig(userUUID);
-  if (!storedConfig) {
+  const config = await loadRouteConfig(userUUID);
+  if (!config) {
     return res.status(404).send({ error: "User configuration not found" });
   }
-  const config = withRequestLanguage(storedConfig, req);
-
+  
   // Add userUUID to config for per-user token caching
   config.userUUID = userUUID;
   config.addonIdentifier = req.addonIdentifier || userUUID;

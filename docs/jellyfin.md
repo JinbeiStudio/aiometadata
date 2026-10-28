@@ -223,8 +223,6 @@ AIOStreams has a Jellyfin server of its own. In that setup the client signs in t
 
 **Catalog rows can follow the user too.** A catalog read asking `?viewer=` is matched the same way and answered as that user: the **Recommendations** rows from their own history and picks, and the catalogs that mean "this account's own list" from their accounts, as on this addon's own server. AIOStreams forwards the query of an addon's URL to every read, so a user's variant that installs this addon as `.../manifest.json?viewer=<name>` gets their rows. A read without a viewer is yours, as before, and one naming nobody here is refused.
 
-**One configuration in several languages.** `?language=` on the install URL (for example `.../manifest.json?language=en-US`, in the `xx-XX` form the configuration page offers) replaces the configuration's language for the manifest, catalog and meta reads made through it, and their caches follow it. A value in any other form is ignored. A household can then keep one configuration and give each AIOStreams user, or each client language through a variant, the language they read.
-
 AIOStreams sends and reads these only with its `WATCH_STATE_HANDOFF_ENABLED` switched on. With **Playback reporting** left on **When a title is opened**, neither resource is declared and AIOStreams records nothing through this addon; opening a title is then the only signal, as for any other client.
 
 Running both servers at once is fine: a client on this addon's server plays through AIOStreams as a plain stream addon, which is not a session AIOStreams reports, so a play is recorded once, by whichever server the client signed in to.
