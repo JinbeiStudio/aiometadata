@@ -4870,7 +4870,17 @@ addon.get("/stremio/:userUUID/manifest.json", async function (req, res) {
         }
         const config = withRequestLanguage(storedConfig, req);
 
-        const { tags, unknown: unknownTags } = resolveManifestTags(config, req.query.tag);
+        const { profileForViewer, scopeConfigToProfile } = require('./lib/jellyfin/profiles');
+        const profile = profileForViewer(config, userUUID, req.query.viewer);
+        if (profile === undefined) {
+            consola.info(`[Manifest] Unknown viewer "${String(req.query.viewer).slice(0, 64)}" for ${userUUID}`);
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Headers', '*');
+            return res.status(404).send({ err: "Unknown viewer" });
+        }
+        if (profile?.tags.length) req.viewerTags = profile.tags;
+
+        const { tags, unknown: unknownTags } = resolveManifestTags(config, tagsAsked(req));
         req.manifestTags = tags;
         // The cap itself applies to catalog and search requests, not to the manifest.
         // It is resolved here anyway so an install URL can be checked before it is used.
@@ -4889,7 +4899,8 @@ addon.get("/stremio/:userUUID/manifest.json", async function (req, res) {
         if (unknownTags.length > 0) {
             consola.warn(`[Manifest] User ${userUUID} asked for ${unknownTags.join(', ')}, which no catalog is tagged with`);
         }
-        const manifest = await getManifest(config, { tags, userUUID });
+        const viewer = profile ? scopeConfigToProfile(config, userUUID, profile.id) : undefined;
+        const manifest = await getManifest(config, { tags, userUUID, viewer });
             if (!manifest) {
                 res.setHeader('Access-Control-Allow-Origin', '*');
                 res.setHeader('Access-Control-Allow-Headers', '*');
