@@ -5547,7 +5547,10 @@ const catalogRoute = async function (req, res) {
       filtersAlreadyApplied = true;
     } else if (catalogFiltersActive({ config, catalogConfig, cleanId })) {
       const { accountOwner } = require('./lib/accounts');
-      const key = cursorKey(userUUID, cleanId, actualType, genreName, accountOwner(config));
+      const { viewerProfile } = require('./lib/jellyfin/viewer');
+      const filteredFor = [viewerProfile() || accountOwner(config), config._ratingOverride, ...resolveManifestTags(storedConfig, tagsAsked(req)).tags]
+        .filter(Boolean).join('|');
+      const key = cursorKey(userUUID, cleanId, actualType, genreName, filteredFor);
       const skipValue = legacySkip || 0;
       // Deduped here rather than after, so what a page serves, and so where the
       // next one starts, is the same whether it is filled for this request or on
