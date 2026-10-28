@@ -512,6 +512,10 @@ function tagsAsked(req) {
   return req.viewerTags ?? req.query.tag;
 }
 
+function withViewerAccounts(config, scoped) {
+  return { ...config, jellyfinAccounts: scoped.jellyfinAccounts, jellyfinAccountOwner: scoped.jellyfinAccountOwner };
+}
+
 /** A request naming nobody here is refused rather than served as yours. */
 function refuseUnknownViewer(res, area, userUUID, name, quiet = false) {
   consola[quiet ? 'debug' : 'info'](`[${area}] Unknown viewer "${String(name).slice(0, 64)}" for ${userUUID}`);
@@ -5776,8 +5780,7 @@ const catalogRouteForViewer = async function (req, res) {
     return respond(req, res, { metas: [] });
   }
 
-  // The account rows read the accounts this user is scoped to: their own, none, or yours when they share your history.
-  req.viewerConfig = { ...storedConfig, jellyfinAccounts: scoped.jellyfinAccounts, jellyfinAccountOwner: scoped.jellyfinAccountOwner };
+  req.viewerConfig = withViewerAccounts(storedConfig, scoped);
   const { noteAccountOwner, noteProfile, runInViewerScope } = require('./lib/jellyfin/viewer');
   return runInViewerScope(false, () => {
     noteProfile(profileKey(scoped));
@@ -5818,8 +5821,13 @@ const metaRoute = async function (req, res) {
   {
     const { collectionMeta, COLLECTION_META_PREFIX } = require('./lib/collectionBuilder/aiostreamsCollections');
     if (stremioId.startsWith(COLLECTION_META_PREFIX)) {
-      const { tags } = resolveManifestTags(config, req.query.tag);
-      const meta = await collectionMeta(userUUID, config, tags, stremioId);
+      const { profileForViewer, scopeConfigToProfile } = require('./lib/jellyfin/profiles');
+      const profile = profileForViewer(config, userUUID, req.query.viewer);
+      if (profile === undefined) return refuseUnknownViewer(res, 'Meta', userUUID, req.query.viewer, true);
+      if (profile?.tags.length) req.viewerTags = profile.tags;
+      const view = profile?.id ? withViewerAccounts(config, scopeConfigToProfile(config, userUUID, profile.id)) : config;
+      const { tags } = resolveManifestTags(config, tagsAsked(req));
+      const meta = await collectionMeta(userUUID, view, tags, stremioId);
       if (!meta) return res.status(404).send({ error: "Collection not found" });
       req.userConfig = config;
       return respond(req, res, { meta });
