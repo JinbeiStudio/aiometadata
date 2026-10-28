@@ -512,6 +512,12 @@ function tagsAsked(req) {
   return req.viewerTags ?? req.query.tag;
 }
 
+/** A request naming nobody here is refused rather than served as yours. */
+function refuseUnknownViewer(res, area, userUUID, name) {
+  consola.info(`[${area}] Unknown viewer "${String(name).slice(0, 64)}" for ${userUUID}`);
+  return res.status(404).json({ error: "Unknown viewer" });
+}
+
 /**
  * The filtering an install URL asks for, from the profiles it names and from the raw
  * parameters. One UUID can then serve both an unrestricted and a family install.
@@ -4861,12 +4867,7 @@ addon.get("/stremio/:userUUID/manifest.json", async function (req, res) {
         
         const { profileForViewer, scopeConfigToProfile } = require('./lib/jellyfin/profiles');
         const profile = profileForViewer(config, userUUID, req.query.viewer);
-        if (profile === undefined) {
-            consola.info(`[Manifest] Unknown viewer "${String(req.query.viewer).slice(0, 64)}" for ${userUUID}`);
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            res.setHeader('Access-Control-Allow-Headers', '*');
-            return res.status(404).send({ err: "Unknown viewer" });
-        }
+        if (profile === undefined) return refuseUnknownViewer(res, 'Manifest', userUUID, req.query.viewer);
         if (profile?.tags.length) req.viewerTags = profile.tags;
 
         const { tags, unknown: unknownTags } = resolveManifestTags(config, tagsAsked(req));
@@ -5763,10 +5764,7 @@ const catalogRouteForViewer = async function (req, res) {
 
   const { profileForViewer, profileKey, scopeConfigToProfile } = require('./lib/jellyfin/profiles');
   const profile = profileForViewer(storedConfig, userUUID, named);
-  if (profile === undefined) {
-    consola.info(`[Catalog] Unknown viewer "${String(named).slice(0, 64)}" for ${userUUID}`);
-    return res.status(404).json({ error: "Unknown viewer" });
-  }
+  if (profile === undefined) return refuseUnknownViewer(res, 'Catalog', userUUID, named);
   if (!profile) return catalogRoute(req, res);
   if (profile.tags.length) req.viewerTags = profile.tags;
   if (!profile.id) return catalogRoute(req, res);
@@ -6049,10 +6047,7 @@ addon.post(["/stremio/:userUUID/watch_state/push/:type/:id.json", "/stremio/:use
   const { configForViewer } = require('./lib/jellyfin/profiles');
   const named = req.body?.viewer ?? req.query.viewer;
   const viewer = configForViewer(config, userUUID, named);
-  if (!viewer) {
-    consola.info(`[Playback] Unknown viewer "${String(named).slice(0, 64)}" for ${userUUID}, dropping ${type}/${id}`);
-    return res.status(404).json({ error: "Unknown viewer" });
-  }
+  if (!viewer) return refuseUnknownViewer(res, 'Playback', userUUID, named);
 
   try {
     const { handlePlaybackReport } = require('./lib/playbackHandler');
@@ -6086,10 +6081,7 @@ addon.get("/stremio/:userUUID/watch_state/pull.json", async function (req, res) 
 
   const { configForViewer } = require('./lib/jellyfin/profiles');
   const viewer = configForViewer(config, userUUID, req.query.viewer);
-  if (!viewer) {
-    consola.info(`[Watch State] Unknown viewer "${String(req.query.viewer).slice(0, 64)}" for ${userUUID}`);
-    return res.status(404).json({ error: "Unknown viewer" });
-  }
+  if (!viewer) return refuseUnknownViewer(res, 'Watch State', userUUID, req.query.viewer);
 
   try {
     const { buildWatchStatePull } = require('./lib/watchState');
