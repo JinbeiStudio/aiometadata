@@ -5909,7 +5909,7 @@ addon.post(["/stremio/:userUUID/watch_state/push/:type/:id.json", "/stremio/:use
     const { handlePlaybackReport } = require('./lib/playbackHandler');
     const { runAsAccountOwner } = require('./lib/jellyfin/viewer');
     const { accountOwner } = require('./lib/accounts');
-    const outcome = await runAsAccountOwner(accountOwner(viewer), () => handlePlaybackReport(type, id, req.body, viewer, userUUID));
+    const outcome = await runAsAccountOwner(accountOwner(viewer), () => handlePlaybackReport(type, id, req.body, viewer, userUUID, { handoff: true }));
     if (outcome.status === 204) {
       return res.status(204).end();
     }

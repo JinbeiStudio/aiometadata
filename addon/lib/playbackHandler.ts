@@ -119,6 +119,41 @@ function writesTrackersFor(config: any): boolean {
   return require('./jellyfin/profiles').writesTrackers(config);
 }
 
+export interface PlaybackOptions {
+  /** Sent by AIOStreams for one of its users, rather than relayed from this server's own play. */
+  handoff?: boolean;
+}
+
+/**
+ * A named user's play from AIOStreams, kept in this server's table as a play here is,
+ * so their history and recommendations do not depend on their having tracker accounts.
+ */
+async function keepHere(config: any, userUUID: string, videoId: string, report: PlaybackReport): Promise<void> {
+  const { profileKey } = require('./jellyfin/profiles');
+  const profile = profileKey(config);
+  if (!profile || !videoId) return;
+  const { upsertPlaystateEverywhere } = require('./jellyfin/aliases');
+  const runtimeMs = report.durationMs ?? undefined;
+  const now = Date.now();
+  const intent = intentOf(report);
+  try {
+    if (intent === 'unwatched') {
+      await upsertPlaystateEverywhere(userUUID, videoId, { positionMs: 0, played: false, lastPlayedAt: null, origin: 'server' }, profile);
+    } else if (intent === 'watched') {
+      const watch = report.event === 'played'
+        ? { at: now, kind: 'first' }
+        : { at: now, kind: 'finish', gapMs: runtimeMs ? runtimeMs / 2 : envInt('JELLYFIN_REWATCH_MIN_GAP_MINUTES', 10, 0) * 60_000 };
+      await upsertPlaystateEverywhere(userUUID, videoId, { positionMs: 0, runtimeMs, played: true, lastPlayedAt: now, origin: 'server', watch }, profile);
+    } else if (report.positionMs !== null) {
+      const { belowResumeFloor } = require('./jellyfin/resume');
+      const kept = belowResumeFloor(report.positionMs, runtimeMs ?? 0) ? 0 : report.positionMs;
+      await upsertPlaystateEverywhere(userUUID, videoId, { positionMs: kept, runtimeMs, lastPlayedAt: now, origin: 'server' }, profile);
+    }
+  } catch (error: any) {
+    logger.warn(`Keeping ${videoId} for ${profile} failed: ${error?.message || error}`);
+  }
+}
+
 export interface PlaybackOutcome {
   status: number;
   reason?: string;
@@ -135,7 +170,8 @@ export async function handleBulkPlaybackReport(
   id: string,
   body: any,
   config: any,
-  userUUID: string
+  userUUID: string,
+  options: PlaybackOptions = {}
 ): Promise<PlaybackOutcome> {
   const event = String(body?.event || '');
   if (type !== 'series' || (event !== 'played' && event !== 'unplayed')) {
@@ -154,6 +190,14 @@ export async function handleBulkPlaybackReport(
   if (mapping && !idMapper.mappingIsType(mapping, 'series')) return { status: 400, reason: 'not a series' };
 
   logger.info(`${event} ${type}/${id}: ${videos.length} video(s) (${body?.scope || 'bulk'} ${body?.part ?? 1}/${body?.parts ?? 1})`);
+
+  if (options.handoff) {
+    const mark: PlaybackReport = {
+      id: null, event, at: null, metaId: body?.metaId ?? null, videoId: null,
+      positionMs: null, durationMs: null, played: event === 'played', season: null, episode: null, ids: {},
+    };
+    for (const video of videos) await keepHere(config, userUUID, video, mark);
+  }
 
   const { shouldTrackServiceMediaType } = require('./watchTracking');
   const method = event === 'played' ? 'addToHistory' : 'removeFromHistory';
@@ -263,11 +307,12 @@ export async function handlePlaybackReport(
   id: string,
   body: any,
   config: any,
-  userUUID: string
+  userUUID: string,
+  options: PlaybackOptions = {}
 ): Promise<PlaybackOutcome> {
   if ((TITLE_EVENTS as readonly string[]).includes(String(body?.event || ''))) return handleTitleReport(type, id, body, config, userUUID);
   const scope = String(body?.scope || '');
-  if (scope === 'season' || scope === 'series') return handleBulkPlaybackReport(type, id, body, config, userUUID);
+  if (scope === 'season' || scope === 'series') return handleBulkPlaybackReport(type, id, body, config, userUUID, options);
 
   const report = parsePlaybackReport(body);
   if (!report) {
@@ -317,6 +362,8 @@ export async function handlePlaybackReport(
     logger.debug(`Pause without a duration for ${type}/${id}, nothing to save`);
     return { status: 204 };
   }
+
+  if (options.handoff) await keepHere(config, userUUID, report.videoId ?? report.metaId ?? id, report);
 
   if (report.event === 'start' && type === 'series' && report.metaId) {
     const { undropOnWatch } = require('./jellyfin/dropped');
