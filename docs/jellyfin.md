@@ -233,7 +233,7 @@ AIOStreams sends and reads these only with its `WATCH_STATE_HANDOFF_ENABLED` swi
 
 Running both servers at once is fine: a client on this addon's server plays through AIOStreams as a plain stream addon, which is not a session AIOStreams reports, so a play is recorded once, by whichever server the client signed in to.
 
-**One configuration in several languages.** `?language=` on the install URL (for example `.../manifest.json?language=en-US`, in the `xx-XX` form the configuration page offers) replaces the configuration's language for the manifest, catalog and meta reads made through it, and their caches follow it. A value in any other form is ignored. A household can then keep one configuration and give each AIOStreams user, or each client language through a variant, the language they read.
+**One configuration in several languages.** A tag can set a **Language** (Catalogs → tags). A read that goes through that tag, by its install link's `?tag=` or by a named user who has it, gets its titles, summaries and catalog names in that language, and the caches follow it. With two tags in different languages, the first one in the tag list wins; a read through no such tag keeps the configuration's language. A household can then keep one configuration and give each user the language they read through the tags on their card.
 
 ## Artwork and appearance
 
